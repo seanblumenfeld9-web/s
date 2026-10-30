@@ -1,0 +1,240 @@
+-- PLS DONATE Visual Donation & Giftbux Simulator UI (Client-Side Visual Only)
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- Remove existing UI if re-executed
+if playerGui:FindFirstChild("PlsDonateVisualUI") then
+	playerGui.PlsDonateVisualUI:Destroy()
+end
+
+-- 1. Main ScreenGui
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "PlsDonateVisualUI"
+screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.Parent = playerGui
+
+-- 2. Draggable Control Panel
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainFrame"
+mainFrame.Size = UDim2.new(0, 330, 0, 310)
+mainFrame.Position = UDim2.new(0.5, -165, 0.5, -155)
+mainFrame.BackgroundColor3 = Color3.fromRGB(20, 24, 22)
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.Parent = screenGui
+
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(0, 12)
+mainFrame.Parent = screenGui
+mainCorner.Parent = mainFrame
+
+local mainStroke = Instance.new("UIStroke")
+mainStroke.Color = Color3.fromRGB(40, 235, 115) -- Classic PLS DONATE Neon Green
+mainStroke.Thickness = 2.5
+mainStroke.Parent = mainFrame
+
+-- 3. Header Bar
+local header = Instance.new("TextLabel")
+header.Size = UDim2.new(1, 0, 0, 44)
+header.BackgroundTransparency = 1
+header.Text = "💸 PLS DONATE Visual Spawner"
+header.TextColor3 = Color3.fromRGB(40, 235, 115)
+header.Font = Enum.Font.FredokaOne
+header.TextSize = 20
+header.Parent = mainFrame
+
+-- Helper to create clean input boxes
+local function createInputBox(placeholder, defaultText, yPos)
+	local box = Instance.new("TextBox")
+	box.Size = UDim2.new(0.86, 0, 0, 38)
+	box.Position = UDim2.new(0.07, 0, 0, yPos)
+	box.BackgroundColor3 = Color3.fromRGB(32, 38, 35)
+	box.Text = defaultText
+	box.PlaceholderText = placeholder
+	box.TextColor3 = Color3.fromRGB(255, 255, 255)
+	box.PlaceholderColor3 = Color3.fromRGB(140, 155, 145)
+	box.Font = Enum.Font.GothamBold
+	box.TextSize = 14
+	box.ClearTextOnFocus = false
+	box.Parent = mainFrame
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 8)
+	corner.Parent = box
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(55, 70, 60)
+	stroke.Thickness = 1
+	stroke.Parent = box
+
+	return box
+end
+
+-- 4. Inputs: Donor Name, Robux Amount, and Optional Current Balance for HUD Detection
+local donorBox = createInputBox("Fake Donor Username (e.g., Haz3mn)", "Haz3mn", 52)
+local amountBox = createInputBox("Robux / Giftbux Amount (e.g., 10000)", "10000", 100)
+local currentBalBox = createInputBox("Current Giftbux on HUD (Optional for Auto-Find)", "", 148)
+
+-- 5. Action Buttons
+local donateBtn = Instance.new("TextButton")
+donateBtn.Size = UDim2.new(0.86, 0, 0, 44)
+donateBtn.Position = UDim2.new(0.07, 0, 0, 200)
+donateBtn.BackgroundColor3 = Color3.fromRGB(35, 210, 100)
+donateBtn.Text = "✨ Trigger Visual Donation"
+donateBtn.TextColor3 = Color3.fromRGB(15, 20, 15)
+donateBtn.Font = Enum.Font.FredokaOne
+donateBtn.TextSize = 17
+donateBtn.Parent = mainFrame
+
+local donateCorner = Instance.new("UICorner")
+donateCorner.CornerRadius = UDim.new(0, 8)
+donateCorner.Parent = donateBtn
+
+local statsBtn = Instance.new("TextButton")
+statsBtn.Size = UDim2.new(0.86, 0, 0, 38)
+statsBtn.Position = UDim2.new(0.07, 0, 0, 254)
+statsBtn.BackgroundColor3 = Color3.fromRGB(45, 55, 50)
+statsBtn.Text = "📈 Add to Local 'Raised' Leaderstat"
+statsBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+statsBtn.Font = Enum.Font.GothamBold
+statsBtn.TextSize = 14
+statsBtn.Parent = mainFrame
+
+local statsCorner = Instance.new("UICorner")
+statsCorner.CornerRadius = UDim.new(0, 8)
+statsCorner.Parent = statsBtn
+
+-- Number formatting with commas (e.g., 10,000)
+local function formatCommas(num)
+	local formatted = tostring(math.floor(num))
+	while true do
+		local k
+		formatted, k = string.gsub(formatted, "^(-?%d+)(%d%d%d)", '%1,%2')
+		if k == 0 then break end
+	end
+	return formatted
+end
+
+-- Strip commas/symbols from text to get raw number
+local function parseRawNumber(str)
+	if not str then return nil end
+	local cleaned = string.gsub(str, "[^%d]", "")
+	return tonumber(cleaned)
+end
+
+-- 6. Rolling Counter Animation for any detected HUD TextLabel
+local function animateHUDLabel(label, startVal, addVal)
+	local targetVal = startVal + addVal
+	local duration = 1.5
+	local elapsed = 0
+	local connection
+
+	connection = RunService.RenderStepped:Connect(function(dt)
+		elapsed = elapsed + dt
+		local alpha = math.clamp(elapsed / duration, 0, 1)
+		-- EaseOutQuad curve
+		local progress = 1 - (1 - alpha) * (1 - alpha)
+		local currentVal = math.floor(startVal + (targetVal - startVal) * progress)
+		label.Text = formatCommas(currentVal)
+
+		if alpha >= 1 then
+			connection:Disconnect()
+			label.Text = formatCommas(targetVal)
+		end
+	end)
+end
+
+-- Search PlayerGui for matching Giftbux balance label
+local function updateHUDCounter(addAmount)
+	local searchStr = currentBalBox.Text
+	local targetBalance = parseRawNumber(searchStr)
+	if not targetBalance then return end
+
+	for _, guiObj in ipairs(playerGui:GetDescendants()) do
+		if guiObj:IsA("TextLabel") and not guiObj:IsDescendantOf(screenGui) then
+			local numInLabel = parseRawNumber(guiObj.Text)
+			if numInLabel and numInLabel == targetBalance then
+				animateHUDLabel(guiObj, targetBalance, addAmount)
+				currentBalBox.Text = tostring(targetBalance + addAmount)
+				break
+			end
+		end
+	end
+end
+
+-- 7. Animated PLS DONATE Popup Banner
+local function spawnDonationBanner(donorName, amount)
+	local banner = Instance.new("Frame")
+	banner.Size = UDim2.new(0, 420, 0, 68)
+	banner.Position = UDim2.new(0.5, -210, 1, 80) -- Starts below bottom of screen
+	banner.BackgroundColor3 = Color3.fromRGB(22, 28, 24)
+	banner.BorderSizePixel = 0
+	banner.Parent = screenGui
+
+	local bCorner = Instance.new("UICorner")
+	bCorner.CornerRadius = UDim.new(0, 14)
+	bCorner.Parent = banner
+
+	local bStroke = Instance.new("UIStroke")
+	bStroke.Color = Color3.fromRGB(40, 235, 115)
+	bStroke.Thickness = 3
+	bStroke.Parent = banner
+
+	local msgLabel = Instance.new("TextLabel")
+	msgLabel.Size = UDim2.new(1, -24, 1, 0)
+	msgLabel.Position = UDim2.new(0, 12, 0, 0)
+	msgLabel.BackgroundTransparency = 1
+	msgLabel.RichText = true
+	msgLabel.Text = string.format(
+		'<font color="#FFFFFF">@%s</font> donated <font color="#28EB73"> %s</font> to <font color="#FFFFFF">@%s</font>!',
+		donorName,
+		formatCommas(amount),
+		player.Name
+	)
+	msgLabel.Font = Enum.Font.FredokaOne
+	msgLabel.TextSize = 20
+	msgLabel.TextWrapped = true
+	msgLabel.Parent = banner
+
+	-- Pop up from bottom
+	TweenService:Create(banner, TweenInfo.new(0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Position = UDim2.new(0.5, -210, 0.82, 0)
+	}):Play()
+
+	-- Hold, then slide back down
+	task.delay(3.5, function()
+		local hideTween = TweenService:Create(banner, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			Position = UDim2.new(0.5, -210, 1, 80)
+		})
+		hideTween:Play()
+		hideTween.Completed:Connect(function()
+			banner:Destroy()
+		end)
+	end)
+end
+
+-- 8. Button Connections
+donateBtn.MouseButton1Click:Connect(function()
+	local donor = donorBox.Text ~= "" and donorBox.Text or "Haz3mn"
+	local amount = tonumber(amountBox.Text) or 10000
+
+	spawnDonationBanner(donor, amount)
+	updateHUDCounter(amount)
+end)
+
+statsBtn.MouseButton1Click:Connect(function()
+	local amount = tonumber(amountBox.Text) or 10000
+	local leaderstats = player:FindFirstChild("leaderstats")
+	if leaderstats then
+		local raised = leaderstats:FindFirstChild("Raised")
+		if raised and (raised:IsA("IntValue") or raised:IsA("NumberValue")) then
+			raised.Value = raised.Value + amount
+		end
+	end
+end)
